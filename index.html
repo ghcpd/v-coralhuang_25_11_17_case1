@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Stable Diffusion WebUI Mock - Fixed</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: "Segoe UI", Arial, sans-serif;
+            min-height: 100vh;
+            background: #f7f7f7;
+            color: #111;
+            transition: background 0.3s ease, color 0.3s ease, padding-top 0.2s ease;
+            padding-top: 0;
+        }
+
+        body.overlay-visible {
+            padding-top: 48px;
+        }
+
+        body.theme-dark {
+            background: #0f0f0f;
+            color: #f5f5f5;
+        }
+
+        body.theme-dark .sidebar {
+            border-color: #333;
+            background: #151515;
+        }
+
+        body.theme-dark .main-panel {
+            background: #1b1b1b;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        #loading-overlay {
+            position: fixed;
+            inset: 0;
+            background: #111;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            z-index: 1000;
+        }
+
+        #fake-localization-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 48px;
+            background: rgba(0, 0, 0, 0.82);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            padding: 0 16px;
+            font-size: 12px;
+            letter-spacing: 0.08em;
+            pointer-events: none;
+            z-index: 900;
+        }
+
+        #app {
+            display: flex;
+            min-height: 100vh;
+            transition: min-height 0.2s ease;
+        }
+
+        body.overlay-visible #app {
+            min-height: calc(100vh - 48px);
+        }
+
+        .sidebar {
+            width: 260px;
+            padding: 16px;
+            border-right: 1px solid #ccc;
+            background: #fff;
+            box-sizing: border-box;
+        }
+
+        .main-panel {
+            flex: 1;
+            padding: 24px 28px;
+            box-sizing: border-box;
+            position: relative;
+            background: #fff;
+        }
+
+        .section {
+            margin-bottom: 24px;
+            border-bottom: 1px solid #e0e0e0;
+            padding-bottom: 16px;
+        }
+
+        .section:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+        }
+
+        .form-group {
+            margin-bottom: 12px;
+        }
+
+        label {
+            display: block;
+            font-size: 13px;
+            margin-bottom: 4px;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            color: #555;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 8px 10px;
+            font-size: 13px;
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            transition: border 0.2s ease;
+        }
+
+        input[type="text"]:focus {
+            border-color: #4673ff;
+            outline: none;
+        }
+
+        button {
+            padding: 10px 16px;
+            font-size: 13px;
+            cursor: pointer;
+            border-radius: 4px;
+            border: 1px solid transparent;
+            background: #4673ff;
+            color: #fff;
+            transition: background 0.2s ease;
+        }
+
+        button:hover {
+            background: #2f4be0;
+        }
+
+        .dropdown {
+            position: relative;
+            user-select: none;
+            margin-bottom: 16px;
+        }
+
+        .dropdown-toggle {
+            border: 1px solid #aaa;
+            padding: 8px 12px;
+            font-size: 13px;
+            background: #fff;
+            cursor: pointer;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .dropdown-toggle:after {
+            content: "▼";
+            font-size: 10px;
+            margin-left: 8px;
+        }
+
+        .dropdown-menu {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            border: 1px solid #aaa;
+            background: #fff;
+            max-height: 140px;
+            overflow-y: auto;
+            box-sizing: border-box;
+            z-index: 10;
+            border-radius: 4px;
+            box-shadow: 0 3px 8px rgba(0, 0, 0, 0.1);
+            padding: 4px 0;
+        }
+
+        .dropdown-item {
+            padding: 8px 12px;
+            font-size: 13px;
+            cursor: pointer;
+        }
+
+        .dropdown-item:hover {
+            background: #f0f0f0;
+        }
+
+        .dropdown-item.selected {
+            background: #e1ecff;
+            font-weight: 600;
+        }
+
+        .status-line {
+            font-size: 12px;
+            color: #777;
+            letter-spacing: 0.04em;
+        }
+
+        .toggles {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .toggle {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+        }
+
+        .generate-panel {
+            margin-top: 24px;
+            text-align: right;
+        }
+
+        @media (max-width: 900px) {
+            #app {
+                flex-direction: column;
+            }
+
+            .sidebar {
+                width: 100%;
+                border-right: none;
+                border-bottom: 1px solid #ccc;
+            }
+        }
+    </style>
+</head>
+<body>
+<div id="loading-overlay">Loading the Stable Diffusion mock UI...</div>
+<div id="fake-localization-bar" class="hidden">Localization overlay - pretending to be busy</div>
+<div id="app" class="hidden">
+    <div class="sidebar">
+        <div class="section">
+            <div class="form-group">
+                <label for="checkpoint-dropdown">Checkpoint model</label>
+                <div id="checkpoint-dropdown" class="dropdown">
+                    <div class="dropdown-toggle" data-selected="" data-placeholder="Select a model" aria-haspopup="true" aria-expanded="false">Select a model</div>
+                    <div class="dropdown-menu hidden"></div>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="sampler-dropdown">Sampler</label>
+                <div id="sampler-dropdown" class="dropdown">
+                    <div class="dropdown-toggle" data-selected="" data-placeholder="Select a sampler" aria-haspopup="true" aria-expanded="false">Select a sampler</div>
+                    <div class="dropdown-menu hidden"></div>
+                </div>
+            </div>
+            <div class="form-group">
+                <button id="btn-scan-models">Scan for models</button>
+            </div>
+        </div>
+        <div class="section">
+            <div class="status-line">Theme & localization</div>
+            <div class="toggles">
+                <label class="toggle">
+                    <input type="checkbox" id="toggle-localization">
+                    Fake localization overlay
+                </label>
+                <label class="toggle">
+                    <input type="checkbox" id="toggle-theme">
+                    Dark theme
+                </label>
+            </div>
+        </div>
+    </div>
+    <div class="main-panel">
+        <div class="section">
+            <div class="form-group">
+                <label for="prompt-input">Prompt</label>
+                <input id="prompt-input" type="text" value="A futuristic city, unreal engine" />
+            </div>
+            <div class="form-group">
+                <label for="negative-input">Negative prompt</label>
+                <input id="negative-input" type="text" value="low quality, blurry" />
+            </div>
+        </div>
+        <div class="section">
+            <div class="status-line">Grid preview (static mock)</div>
+            <div style="height: 240px; background: #ebebeb; border-radius: 6px; border: 1px solid #ddd; display: flex; align-items: center; justify-content: center; color: #666; font-size: 14px;">
+                Sample output placeholder
+            </div>
+        </div>
+        <div class="generate-panel">
+            <button id="btn-generate">Generate</button>
+        </div>
+    </div>
+</div>
+<script>
+    var checkpointModels = [
+        "stable-diffusion-v1-4.safetensors",
+        "majicmixRealistic_v5.safetensors"
+    ];
+    var samplers = [
+        "Euler a",
+        "Euler",
+        "DPM++ 2M Karras"
+    ];
+
+    var checkpointDropdownElement;
+    var samplerDropdownElement;
+
+    function renderDropdownOptions(dropdownElement, items) {
+        var toggle = dropdownElement.querySelector(".dropdown-toggle");
+        var menu = dropdownElement.querySelector(".dropdown-menu");
+        menu.innerHTML = "";
+
+        items.forEach(function (item) {
+            var option = document.createElement("div");
+            option.className = "dropdown-item";
+            option.textContent = item;
+            option.addEventListener("click", function (event) {
+                event.stopPropagation();
+                toggle.textContent = item;
+                toggle.dataset.selected = item;
+                toggle.setAttribute("aria-expanded", "false");
+                menu.classList.add("hidden");
+                updateSelectedOption(menu, item);
+            });
+            menu.appendChild(option);
+        });
+
+        var placeholder = toggle.dataset.placeholder || "Select an option";
+        var selectedValue = toggle.dataset.selected || "";
+        var hasSelection = items.some(function (value) {
+            return value === selectedValue;
+        });
+
+        if (!hasSelection) {
+            if (items.length) {
+                selectedValue = items[0];
+                toggle.dataset.selected = selectedValue;
+            } else {
+                selectedValue = "";
+                toggle.dataset.selected = "";
+            }
+        }
+
+        toggle.textContent = selectedValue || placeholder;
+        menu.classList.add("hidden");
+        updateSelectedOption(menu, selectedValue);
+    }
+
+    function updateSelectedOption(menu, selectedValue) {
+        var items = menu.querySelectorAll(".dropdown-item");
+        items.forEach(function (itemElement) {
+            itemElement.classList.toggle("selected", itemElement.textContent === selectedValue);
+        });
+    }
+
+    function attachDropdownBehavior(dropdownElement) {
+        var toggle = dropdownElement.querySelector(".dropdown-toggle");
+        var menu = dropdownElement.querySelector(".dropdown-menu");
+
+        toggle.addEventListener("click", function (event) {
+            event.stopPropagation();
+            menu.classList.toggle("hidden");
+            var expanded = !menu.classList.contains("hidden");
+            toggle.setAttribute("aria-expanded", expanded.toString());
+        });
+    }
+
+    document.addEventListener("click", function (event) {
+        var shouldClose = !event.target.closest(".dropdown");
+        if (!shouldClose) {
+            return;
+        }
+        document.querySelectorAll(".dropdown-menu").forEach(function (menu) {
+            if (!menu.classList.contains("hidden")) {
+                menu.classList.add("hidden");
+                var toggle = menu.parentElement.querySelector(".dropdown-toggle");
+                if (toggle) {
+                    toggle.setAttribute("aria-expanded", "false");
+                }
+            }
+        });
+    });
+
+    function attachScanModelsButton() {
+        var btn = document.getElementById("btn-scan-models");
+        btn.addEventListener("click", function () {
+            checkpointModels.push("majicmixRealistic_v7.safetensors");
+            checkpointModels.push("someNewModel_v2.safetensors");
+            if (checkpointDropdownElement) {
+                renderDropdownOptions(checkpointDropdownElement, checkpointModels);
+            }
+            console.log("Scan models: dropdown refreshed with new models.");
+        });
+    }
+
+    function attachThemeAndLocalizationToggles() {
+        var checkLocalization = document.getElementById("toggle-localization");
+        var checkTheme = document.getElementById("toggle-theme");
+        var fakeBar = document.getElementById("fake-localization-bar");
+
+        function updateClasses() {
+            var body = document.body;
+
+            if (checkLocalization.checked) {
+                body.classList.add("locale-zh");
+                body.classList.add("overlay-visible");
+                fakeBar.classList.remove("hidden");
+            } else {
+                body.classList.remove("locale-zh");
+                body.classList.remove("overlay-visible");
+                fakeBar.classList.add("hidden");
+            }
+
+            if (checkTheme.checked) {
+                body.classList.add("theme-dark");
+            } else {
+                body.classList.remove("theme-dark");
+            }
+        }
+
+        checkLocalization.addEventListener("change", updateClasses);
+        checkTheme.addEventListener("change", updateClasses);
+    }
+
+    function initPage() {
+        var app = document.getElementById("app");
+        var loading = document.getElementById("loading-overlay");
+
+        checkpointDropdownElement = document.getElementById("checkpoint-dropdown");
+        samplerDropdownElement = document.getElementById("sampler-dropdown");
+
+        renderDropdownOptions(checkpointDropdownElement, checkpointModels);
+        renderDropdownOptions(samplerDropdownElement, samplers);
+
+        attachDropdownBehavior(checkpointDropdownElement);
+        attachDropdownBehavior(samplerDropdownElement);
+
+        attachScanModelsButton();
+        attachThemeAndLocalizationToggles();
+
+        loading.classList.add("hidden");
+        app.classList.remove("hidden");
+    }
+
+    function initBackendConfig() {
+        var config = [];
+        if (window.nonExistingConfig && Array.isArray(window.nonExistingConfig.models)) {
+            config = window.nonExistingConfig.models.map(function (m) {
+                return m.name;
+            });
+        }
+        console.log("Loaded backend config:", config);
+    }
+
+    window.addEventListener("load", function () {
+        try {
+            initBackendConfig();
+        } catch (error) {
+            console.warn("Backend config unavailable, continuing with defaults.", error);
+        }
+        initPage();
+    });
+</script>
+</body>
+</html>
