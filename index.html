@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Broken Stable Diffusion WebUI Mock</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        /* Bug 2: loading overlay that never hides when init fails */
+        #loading-overlay {
+            position: fixed;
+            inset: 0;
+            background: #111;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            z-index: 1000;
+        }
+
+        #app {
+            display: flex;
+            height: 100vh;
+        }
+
+        .sidebar {
+            width: 260px;
+            padding: 16px;
+            border-right: 1px solid #ccc;
+            box-sizing: border-box;
+        }
+
+        .main-panel {
+            flex: 1;
+            padding: 16px;
+            box-sizing: border-box;
+            position: relative;
+        }
+
+        .form-group {
+            margin-bottom: 12px;
+        }
+
+        label {
+            display: block;
+            font-size: 13px;
+            margin-bottom: 4px;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 6px 8px;
+            font-size: 13px;
+            box-sizing: border-box;
+        }
+
+        button {
+            padding: 6px 12px;
+            font-size: 13px;
+            cursor: pointer;
+        }
+
+        /* Custom dropdown style (mock Gradio-like component) */
+        .dropdown {
+            position: relative;
+            user-select: none;
+            margin-bottom: 10px;
+        }
+
+        .dropdown-toggle {
+            border: 1px solid #aaa;
+            padding: 6px 8px;
+            font-size: 13px;
+            background: #fff;
+            cursor: pointer;
+        }
+
+        .dropdown-toggle::after {
+            content: "▼";
+            float: right;
+            font-size: 10px;
+            margin-top: 3px;
+        }
+
+        .dropdown-menu {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            border: 1px solid #aaa;
+            background: #fff;
+            max-height: 120px;
+            overflow-y: auto;
+            box-sizing: border-box;
+            z-index: 10;
+        }
+
+        .dropdown-item {
+            padding: 6px 8px;
+            font-size: 13px;
+            cursor: pointer;
+        }
+
+        .dropdown-item:hover {
+            background: #eee;
+        }
+
+        /* Bug 4: fake localization/theme bar that covers UI and is clickable */
+        .fake-localization-bar {
+            position: relative;
+            height: 48px;
+            background: rgba(0, 0, 0, 0.85);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            padding: 0 16px;
+            font-size: 12px;
+            z-index: 1;
+            pointer-events: none;
+            border-radius: 4px;
+            margin-bottom: 12px;
+        }
+
+        .fake-localization-bar span {
+            margin-right: 12px;
+        }
+
+        body.theme-dark .sidebar {
+            width: 380px;
+            background: #1e1e1e;
+            color: #eee;
+        }
+
+        body.theme-dark .main-panel {
+            background: #121212;
+            color: #eee;
+        }
+
+        body.theme-dark .dropdown-menu {
+            max-height: 160px;
+        }
+
+        .note {
+            font-size: 12px;
+            color: #666;
+            margin-top: 4px;
+        }
+
+        .section-title {
+            font-weight: bold;
+            margin-top: 8px;
+            margin-bottom: 4px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Bug 2: overlay will remain if init throws before hiding it -->
+    <div id="loading-overlay">
+        Loading WebUI...
+    </div>
+
+    <div id="app" class="hidden">
+        <div class="sidebar">
+            <div class="section-title">Checkpoint / Sampler</div>
+
+            <!-- Bug 1 & 3: dropdown misbehavior + options not refreshed -->
+            <div class="form-group">
+                <label for="checkpoint-dropdown">Stable Diffusion checkpoint</label>
+                <div id="checkpoint-dropdown" class="dropdown">
+                    <div class="dropdown-toggle" data-selected="">Select checkpoint</div>
+                    <div class="dropdown-menu hidden"></div>
+                </div>
+                <div class="note">
+                    Expected: stable dropdown with all existing and newly scanned models.<br>
+                    Actual: menu flashes and closes; new models never appear.
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="sampler-dropdown">Sampler</label>
+                <div id="sampler-dropdown" class="dropdown">
+                    <div class="dropdown-toggle" data-selected="">Select sampler</div>
+                    <div class="dropdown-menu hidden"></div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <button id="btn-scan-models">Scan for models (mock)</button>
+                <div class="note">
+                    This button updates the internal model list only.<br>
+                    The dropdown options are never re-rendered.
+                </div>
+            </div>
+
+            <div class="section-title">Extensions</div>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="toggle-localization">
+                    Enable localization extension (mock)
+                </label>
+            </div>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="toggle-theme">
+                    Enable dark theme extension (mock)
+                </label>
+            </div>
+            <div class="note">
+                When both are enabled, a fake top bar covers controls<br>
+                and interferes with clicking dropdowns and buttons.
+            </div>
+        </div>
+
+        <div class="main-panel">
+            <!-- Fake localization bar, initially hidden -->
+            <div id="fake-localization-bar" class="fake-localization-bar hidden">
+                <span>Localization: zh_CN (mock)</span>
+                <span>Theme: Dark (mock)</span>
+                <span>Extension loaded</span>
+            </div>
+
+            <div class="section-title">Text to Image</div>
+
+            <div class="form-group">
+                <label for="prompt">Prompt</label>
+                <input id="prompt" type="text" placeholder="masterpiece, best quality, 1girl, ...">
+            </div>
+
+            <div class="form-group">
+                <label for="negative-prompt">Negative prompt</label>
+                <input id="negative-prompt" type="text" placeholder="lowres, bad anatomy, ...">
+            </div>
+
+            <div class="form-group">
+                <button class="btn-generate">Generate</button>
+                <div class="note">
+                    With certain combinations of theme and localization,<br>
+                    this button can be partially covered by the fake bar.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // =========================
+        //  Mock "backend" data
+        // =========================
+        var checkpointModels = [
+            "v1-5-pruned-emaonly.safetensors"
+        ];
+
+        var samplers = [
+            "Euler a",
+            "Euler",
+            "DPM++ 2M Karras"
+        ];
+
+        // =========================
+        //  Helper: render dropdown items
+        // =========================
+        function ensureDropdownPlaceholder(dropdownElement) {
+            var toggle = dropdownElement.querySelector(".dropdown-toggle");
+            if (!toggle.dataset.placeholder) {
+                toggle.dataset.placeholder = toggle.textContent.trim();
+            }
+        }
+
+        function renderDropdownOptions(dropdownElement, items) {
+            ensureDropdownPlaceholder(dropdownElement);
+            var menu = dropdownElement.querySelector(".dropdown-menu");
+            var toggle = dropdownElement.querySelector(".dropdown-toggle");
+            var selectedValue = toggle.dataset.selected || "";
+            menu.innerHTML = "";
+
+            items.forEach(function (item) {
+                var option = document.createElement("div");
+                option.className = "dropdown-item";
+                option.textContent = item;
+                option.addEventListener("click", function (event) {
+                    toggle.textContent = item;
+                    toggle.dataset.selected = item;
+                    menu.classList.add("hidden");
+                    event.stopPropagation();
+                });
+                menu.appendChild(option);
+            });
+
+            if (selectedValue && items.indexOf(selectedValue) !== -1) {
+                toggle.textContent = selectedValue;
+            } else {
+                toggle.dataset.selected = "";
+                toggle.textContent = toggle.dataset.placeholder || "Select option";
+            }
+        }
+
+        function closeDropdownMenus(exceptMenu) {
+            var menus = document.querySelectorAll(".dropdown-menu");
+            menus.forEach(function (menu) {
+                if (menu !== exceptMenu) {
+                    menu.classList.add("hidden");
+                }
+            });
+        }
+
+        // =========================
+        //  Bug 1: dropdown closes immediately due to global click handler
+        // =========================
+        function attachDropdownBehavior(dropdownElement) {
+            var toggle = dropdownElement.querySelector(".dropdown-toggle");
+            var menu = dropdownElement.querySelector(".dropdown-menu");
+            ensureDropdownPlaceholder(dropdownElement);
+
+            toggle.addEventListener("click", function (event) {
+                event.stopPropagation();
+                var willOpen = menu.classList.contains("hidden");
+                closeDropdownMenus(menu);
+                if (willOpen) {
+                    menu.classList.remove("hidden");
+                } else {
+                    menu.classList.add("hidden");
+                }
+            });
+
+            menu.addEventListener("click", function (event) {
+                event.stopPropagation();
+            });
+        }
+
+        document.addEventListener("click", function (event) {
+            if (!event.target.closest(".dropdown")) {
+                closeDropdownMenus();
+            }
+        });
+
+        // =========================
+        //  Bug 3: scan models updates array only, not UI
+        // =========================
+        function attachScanModelsButton(dropdownElement) {
+            var btn = document.getElementById("btn-scan-models");
+            btn.addEventListener("click", function () {
+                var newlyFound = [
+                    "majicmixRealistic_v7.safetensors",
+                    "someNewModel_v2.safetensors"
+                ];
+
+                var addedAny = false;
+
+                newlyFound.forEach(function (model) {
+                    if (checkpointModels.indexOf(model) === -1) {
+                        checkpointModels.push(model);
+                        addedAny = true;
+                    }
+                });
+
+                if (addedAny) {
+                    renderDropdownOptions(dropdownElement, checkpointModels);
+                    console.log("Scan models: dropdown refreshed with new models.");
+                } else {
+                    console.log("Scan models: no new models detected.");
+                }
+            });
+        }
+
+        // =========================
+        //  Bug 4: theme + localization toggles cause overlay and layout issues
+        // =========================
+        function attachThemeAndLocalizationToggles() {
+            var checkLocalization = document.getElementById("toggle-localization");
+            var checkTheme = document.getElementById("toggle-theme");
+            var fakeBar = document.getElementById("fake-localization-bar");
+
+            function updateClasses() {
+                var body = document.body;
+
+                if (checkLocalization.checked) {
+                    body.classList.add("locale-zh");
+                    fakeBar.classList.remove("hidden");
+                } else {
+                    body.classList.remove("locale-zh");
+                    fakeBar.classList.add("hidden");
+                }
+
+                if (checkTheme.checked) {
+                    body.classList.add("theme-dark");
+                } else {
+                    body.classList.remove("theme-dark");
+                }
+            }
+
+            checkLocalization.addEventListener("change", updateClasses);
+            checkTheme.addEventListener("change", updateClasses);
+        }
+
+        // =========================
+        //  Normal page init (will not run if initBackendConfig throws)
+        // =========================
+        function initPage() {
+            var app = document.getElementById("app");
+            var loading = document.getElementById("loading-overlay");
+
+            var checkpointDropdown = document.getElementById("checkpoint-dropdown");
+            var samplerDropdown = document.getElementById("sampler-dropdown");
+
+            renderDropdownOptions(checkpointDropdown, checkpointModels);
+            renderDropdownOptions(samplerDropdown, samplers);
+
+            attachDropdownBehavior(checkpointDropdown);
+            attachDropdownBehavior(samplerDropdown);
+
+            attachScanModelsButton(checkpointDropdown);
+            attachThemeAndLocalizationToggles();
+
+            loading.classList.add("hidden");
+            app.classList.remove("hidden");
+        }
+
+        // =========================
+        //  Bug 2: backend config init throws before initPage
+        // =========================
+        function initBackendConfig() {
+            var backendConfig = window.backendConfig;
+            if (backendConfig && Array.isArray(backendConfig.models)) {
+                var config = backendConfig.models.map(function (m) {
+                    return m.name;
+                });
+                if (config.length) {
+                    checkpointModels = config.slice();
+                }
+                console.log("Loaded backend config:", config);
+            } else {
+                console.log("No backend config found, continuing with defaults.");
+            }
+        }
+
+        window.addEventListener("load", function () {
+            try {
+                initBackendConfig();
+            } catch (error) {
+                console.error("Backend config failed to load:", error);
+            } finally {
+                initPage();
+            }
+        });
+    </script>
+</body>
+</html>
