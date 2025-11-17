@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Stable Diffusion WebUI Mock (Fixed)</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        /* Loading overlay */
+        #loading-overlay {
+            position: fixed;
+            inset: 0;
+            background: #111;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            z-index: 1000;
+        }
+
+        #app {
+            display: flex;
+            height: 100vh;
+        }
+
+        .sidebar {
+            width: 260px;
+            padding: 16px;
+            border-right: 1px solid #ccc;
+            box-sizing: border-box;
+        }
+
+        .main-panel {
+            flex: 1;
+            padding: 16px;
+            box-sizing: border-box;
+            position: relative;
+        }
+
+        .form-group {
+            margin-bottom: 12px;
+        }
+
+        label {
+            display: block;
+            font-size: 13px;
+            margin-bottom: 4px;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 6px 8px;
+            font-size: 13px;
+            box-sizing: border-box;
+        }
+
+        button {
+            padding: 6px 12px;
+            font-size: 13px;
+            cursor: pointer;
+        }
+
+        /* Custom dropdown style (mock Gradio-like component) */
+        .dropdown {
+            position: relative;
+            user-select: none;
+            margin-bottom: 10px;
+        }
+
+        .dropdown-toggle {
+            border: 1px solid #aaa;
+            padding: 6px 8px;
+            font-size: 13px;
+            background: #fff;
+            cursor: pointer;
+        }
+
+        .dropdown-toggle::after {
+            content: "▼";
+            float: right;
+            font-size: 10px;
+            margin-top: 3px;
+        }
+
+        .dropdown-menu {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            border: 1px solid #aaa;
+            background: #fff;
+            max-height: 120px;
+            overflow-y: auto;
+            box-sizing: border-box;
+            z-index: 1100; /* ensure above fake bar */
+        }
+
+        .dropdown-item {
+            padding: 6px 8px;
+            font-size: 13px;
+            cursor: pointer;
+        }
+
+        .dropdown-item:hover {
+            background: #eee;
+        }
+
+        /* Fake localization/theme bar (non-blocking) */
+        .fake-localization-bar {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 48px;
+            background: rgba(0, 0, 0, 0.85);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            padding: 0 16px;
+            font-size: 12px;
+            z-index: 50; /* reduce to avoid covering interactive controls */
+            pointer-events: none; /* do not intercept mouse events */
+        }
+
+        .fake-localization-bar span {
+            margin-right: 12px;
+        }
+
+        body.theme-dark .sidebar {
+            width: 380px;
+            background: #1e1e1e;
+            color: #eee;
+        }
+
+        body.theme-dark .main-panel {
+            background: #121212;
+            color: #eee;
+        }
+
+        /* ensure layout shifts down only when localization is enabled (not tied to theme) */
+        body.locale-zh .main-panel {
+            padding-top: 60px;
+        }
+
+        .note {
+            font-size: 12px;
+            color: #666;
+            margin-top: 4px;
+        }
+
+        .section-title {
+            font-weight: bold;
+            margin-top: 8px;
+            margin-bottom: 4px;
+            font-size: 14px;
+        }
+
+        .btn-generate {
+            background: #1976d2;
+            color: #fff;
+            border: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="loading-overlay">
+        Loading WebUI...
+    </div>
+
+    <div id="app" class="hidden">
+        <div class="sidebar">
+            <div class="section-title">Checkpoint / Sampler</div>
+
+            <div class="form-group">
+                <label for="checkpoint-dropdown">Stable Diffusion checkpoint</label>
+                <div id="checkpoint-dropdown" class="dropdown">
+                    <div class="dropdown-toggle" data-selected="">Select checkpoint</div>
+                    <div class="dropdown-menu hidden"></div>
+                </div>
+                <div class="note">
+                    Expected: stable dropdown with all existing and newly scanned models.<br>
+                    Actual: menu flashes and closes; new models never appear.
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="sampler-dropdown">Sampler</label>
+                <div id="sampler-dropdown" class="dropdown">
+                    <div class="dropdown-toggle" data-selected="">Select sampler</div>
+                    <div class="dropdown-menu hidden"></div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <button id="btn-scan-models">Scan for models (mock)</button>
+                <div class="note">
+                    This button updates the internal model list only.<br>
+                    The dropdown options are never re-rendered.
+                </div>
+            </div>
+
+            <div class="section-title">Extensions</div>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="toggle-localization">
+                    Enable localization extension (mock)
+                </label>
+            </div>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="toggle-theme">
+                    Enable dark theme extension (mock)
+                </label>
+            </div>
+            <div class="note">
+                When both are enabled, a fake top bar covers controls and interferes with clicking dropdowns and buttons.
+            </div>
+        </div>
+
+        <div class="main-panel">
+            <div id="fake-localization-bar" class="fake-localization-bar hidden">
+                <span>Localization: zh_CN (mock)</span>
+                <span>Theme: Dark (mock)</span>
+                <span>Extension loaded</span>
+            </div>
+
+            <div class="section-title">Text to Image</div>
+
+            <div class="form-group">
+                <label for="prompt">Prompt</label>
+                <input id="prompt" type="text" placeholder="masterpiece, best quality, 1girl, ...">
+            </div>
+
+            <div class="form-group">
+                <label for="negative-prompt">Negative prompt</label>
+                <input id="negative-prompt" type="text" placeholder="lowres, bad anatomy, ...">
+            </div>
+
+            <div class="form-group">
+                <button class="btn-generate">Generate</button>
+                <div class="note">
+                    With certain combinations of theme and localization, this button can be partially covered by the fake bar.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // =========================
+        //  Mock "backend" data
+        // =========================
+        var checkpointModels = [
+            "v1-5-pruned-emaonly.safetensors"
+        ];
+
+        var samplers = [
+            "Euler a",
+            "Euler",
+            "DPM++ 2M Karras"
+        ];
+
+        // =========================
+        //  Helper: render dropdown items
+        // =========================
+        function renderDropdownOptions(dropdownElement, items) {
+            var menu = dropdownElement.querySelector(".dropdown-menu");
+            menu.innerHTML = "";
+
+            items.forEach(function (item) {
+                var option = document.createElement("div");
+                option.className = "dropdown-item";
+                option.textContent = item;
+                option.addEventListener("click", function (event) {
+                    var toggle = dropdownElement.querySelector(".dropdown-toggle");
+                    toggle.textContent = item;
+                    toggle.dataset.selected = item;
+                    menu.classList.add("hidden");
+                    event.stopPropagation();
+                });
+                menu.appendChild(option);
+            });
+        }
+
+        // =========================
+        //  Dropdown behavior: open/close and outside click
+        // =========================
+        function attachDropdownBehavior(dropdownElement) {
+            var toggle = dropdownElement.querySelector(".dropdown-toggle");
+            var menu = dropdownElement.querySelector(".dropdown-menu");
+
+            toggle.addEventListener("click", function (event) {
+                // Stop propagation so a global click handler doesn't immediately close the menu
+                event.stopPropagation();
+                menu.classList.toggle("hidden");
+            });
+        }
+
+        // Hide dropdowns when clicking outside of them
+        document.addEventListener("click", function (e) {
+            if (e.target.closest && e.target.closest('.dropdown')) {
+                // Click happened inside a dropdown --- do not hide menus
+                return;
+            }
+
+            var menus = document.querySelectorAll(".dropdown-menu");
+            menus.forEach(function (menu) {
+                if (!menu.classList.contains("hidden")) {
+                    menu.classList.add("hidden");
+                }
+            });
+        });
+
+        // =========================
+        //  Scan models: update array and re-render the dropdown
+        // =========================
+        function attachScanModelsButton(checkpointDropdown) {
+            var btn = document.getElementById("btn-scan-models");
+            btn.addEventListener("click", function (event) {
+                checkpointModels.push("majicmixRealistic_v7.safetensors");
+                checkpointModels.push("someNewModel_v2.safetensors");
+
+                // Re-render dropdown options so UI reflects the updated model list.
+                renderDropdownOptions(checkpointDropdown, checkpointModels);
+                console.log("Scan models: model list updated and dropdown re-rendered.");
+                event.stopPropagation();
+            });
+        }
+
+        // =========================
+        //  Theme and localization toggles (do not create an overlay that blocks controls)
+        // =========================
+        function attachThemeAndLocalizationToggles() {
+            var checkLocalization = document.getElementById("toggle-localization");
+            var checkTheme = document.getElementById("toggle-theme");
+            var fakeBar = document.getElementById("fake-localization-bar");
+
+            function updateClasses() {
+                var body = document.body;
+
+                if (checkLocalization.checked) {
+                    body.classList.add("locale-zh");
+                    fakeBar.classList.remove("hidden");
+                } else {
+                    body.classList.remove("locale-zh");
+                    fakeBar.classList.add("hidden");
+                }
+
+                if (checkTheme.checked) {
+                    body.classList.add("theme-dark");
+                } else {
+                    body.classList.remove("theme-dark");
+                }
+            }
+
+            checkLocalization.addEventListener("change", updateClasses);
+            checkTheme.addEventListener("change", updateClasses);
+        }
+
+        // =========================
+        //  Normal page init (guarded so that errors won't prevent app from showing)
+        // =========================
+        function initPage() {
+            var app = document.getElementById("app");
+            var loading = document.getElementById("loading-overlay");
+
+            var checkpointDropdown = document.getElementById("checkpoint-dropdown");
+            var samplerDropdown = document.getElementById("sampler-dropdown");
+
+            renderDropdownOptions(checkpointDropdown, checkpointModels);
+            renderDropdownOptions(samplerDropdown, samplers);
+
+            attachDropdownBehavior(checkpointDropdown);
+            attachDropdownBehavior(samplerDropdown);
+
+            attachScanModelsButton(checkpointDropdown);
+            attachThemeAndLocalizationToggles();
+
+            loading.classList.add("hidden");
+            app.classList.remove("hidden");
+        }
+
+        // =========================
+        //  Backend config init is optional; if missing, log and continue
+        // =========================
+        function initBackendConfig() {
+            // If the backend config is missing, don't throw --- just log.
+            if (window.nonExistingConfig && window.nonExistingConfig.models) {
+                try {
+                    var config = window.nonExistingConfig.models.map(function(m) { return m.name; });
+                    console.log("Loaded backend config:", config);
+                } catch (err) {
+                    console.warn("Error reading backend config, continuing without it.", err);
+                }
+            } else {
+                console.log("No backend config found (mock), continuing.");
+            }
+        }
+
+        window.addEventListener("load", function () {
+            try {
+                initBackendConfig();
+            } catch (err) {
+                // Defensive: ensure any unexpected errors do not block the UI
+                console.warn("initBackendConfig threw, continuing:", err);
+            } finally {
+                // Always initialize UI
+                try {
+                    initPage();
+                } catch (err) {
+                    console.error("initPage error:", err);
+                }
+            }
+        });
+    </script>
+</body>
+</html>
