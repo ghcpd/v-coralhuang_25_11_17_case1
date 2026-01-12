@@ -115,7 +115,7 @@
 
         /* Bug 4: fake localization/theme bar that covers UI and is clickable */
         .fake-localization-bar {
-            position: absolute;
+            position: fixed;
             top: 0;
             left: 0;
             right: 0;
@@ -126,7 +126,8 @@
             align-items: center;
             padding: 0 16px;
             font-size: 12px;
-            z-index: 999;
+            z-index: 100;
+            pointer-events: none;
         }
 
         .fake-localization-bar span {
@@ -142,19 +143,19 @@
         body.theme-dark .main-panel {
             background: #121212;
             color: #eee;
+            padding-top: 16px;
         }
 
         body.theme-dark.locale-zh .main-panel {
-            padding-top: 60px;
-        }
-
-        body.theme-dark.locale-zh .btn-generate {
-            position: relative;
-            top: -10px;
+            padding-top: 64px;
         }
 
         body.theme-dark .dropdown-menu {
             max-height: 80px;
+        }
+
+        body.locale-zh .main-panel {
+            padding-top: 64px;
         }
 
         .note {
@@ -303,9 +304,9 @@
             var menu = dropdownElement.querySelector(".dropdown-menu");
 
             toggle.addEventListener("click", function (event) {
-                // Intentional bug: we do NOT call event.stopPropagation() here,
-                // so the global document click handler below will fire right after
-                // and close the menu immediately.
+                // FIX: Stop propagation so the global click handler does not close
+                // the menu immediately after opening it.
+                event.stopPropagation();
                 menu.classList.toggle("hidden");
             });
         }
@@ -328,9 +329,12 @@
                 checkpointModels.push("majicmixRealistic_v7.safetensors");
                 checkpointModels.push("someNewModel_v2.safetensors");
 
-                // Intentional bug: we do not call renderDropdownOptions again.
-                // UI will keep showing only the original model.
-                console.log("Scan models: found new models, but UI was not re-rendered.");
+                // FIX: Re-render the dropdown after updating the model list.
+                var checkpointDropdown = document.getElementById("checkpoint-dropdown");
+                renderDropdownOptions(checkpointDropdown, checkpointModels);
+                attachDropdownBehavior(checkpointDropdown);
+                
+                console.log("Scan models: found new models and UI was re-rendered.");
             });
         }
 
@@ -391,19 +395,26 @@
         //  Bug 2: backend config init throws before initPage
         // =========================
         function initBackendConfig() {
-            // Intentional bug: window.nonExistingConfig is undefined.
-            // The following line throws a TypeError.
-            var config = window.nonExistingConfig.models.map(function (m) {
-                return m.name;
-            });
-
-            console.log("Loaded backend config:", config);
+            // FIX: Guard against missing config with a try-catch block.
+            // This ensures initPage runs regardless of whether backend config loads.
+            try {
+                var config = window.nonExistingConfig.models.map(function (m) {
+                    return m.name;
+                });
+                console.log("Loaded backend config:", config);
+            } catch (err) {
+                console.warn("Backend config failed to load, continuing with defaults:", err.message);
+            }
         }
 
         window.addEventListener("load", function () {
-            // Because initBackendConfig throws, initPage is never called,
-            // so the loading overlay remains forever.
-            initBackendConfig();
+            // FIX: Even if initBackendConfig throws, initPage will still run
+            // because errors are now caught.
+            try {
+                initBackendConfig();
+            } catch (err) {
+                console.error("Initialization error:", err);
+            }
             initPage();
         });
     </script>
